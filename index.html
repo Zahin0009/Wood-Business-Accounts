@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wood Supply Tracker (BDT/KG)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Font: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-primary: #795548; /* Brown/Woodsy */
+            --color-secondary: #ff9800; /* Amber/Warm */
+            --color-light: #f5f5f5; /* Light Grey */
+            --color-dark: #3e2723; /* Dark Brown */
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--color-light);
+            transition: background-color 0.3s;
+        }
+        .tab-button.active {
+            background-color: var(--color-primary);
+            color: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .card {
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-2px);
+        }
+        .form-input {
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 8px;
+            transition: border-color 0.3s;
+        }
+        .form-input:focus {
+            border-color: var(--color-secondary);
+            outline: none;
+        }
+        .btn-primary {
+            background-color: var(--color-secondary);
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        .btn-primary:hover {
+            background-color: #e68a00;
+            transform: translateY(-1px);
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <div id="loading-spinner" class="fixed inset-0 bg-white/70 flex items-center justify-center z-50">
+        <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-amber-600"></div>
+        <p class="ml-4 text-lg font-semibold text-amber-800">Loading Business Data...</p>
+    </div>
+
+    <div id="app-container" class="max-w-7xl mx-auto p-4 md:p-8 opacity-0 transition-opacity duration-500">
+        <!-- Header and Auth Info -->
+        <header class="mb-8 border-b-4 border-amber-600 pb-4">
+            <h1 class="text-4xl font-extrabold text-gray-800 tracking-tight">Wood Supply Ledger</h1>
+            <p id="user-info" class="text-sm text-gray-500 mt-1">Status: Initializing...</p>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="flex flex-wrap gap-2 mb-8">
+            <button class="tab-button active px-4 py-2 rounded-lg font-semibold text-sm transition" data-target="dashboard">Dashboard/Report</button>
+            <button class="tab-button px-4 py-2 rounded-lg font-semibold text-sm text-gray-700 hover:bg-gray-100 transition" data-target="financial">Financial Accounts</button>
+            <button class="tab-button px-4 py-2 rounded-lg font-semibold text-sm text-gray-700 hover:bg-gray-100 transition" data-target="dealers">Dealers & Ledger</button>
+            <button class="tab-button px-4 py-2 rounded-lg font-semibold text-sm text-gray-700 hover:bg-gray-100 transition" data-target="rates">Company Rates & Billing</button>
+        </nav>
+
+        <!-- Main Content Views -->
+        <div id="views-container">
+
+            <!-- 1. Dashboard/Report View -->
+            <div id="dashboard" class="tab-view space-y-8">
+                <h2 class="text-3xl font-bold text-dark mb-6">Main Report & Transaction Entry</h2>
+
+                <!-- Transaction Entry Form -->
+                <div class="card p-6">
+                    <h3 class="text-xl font-bold text-gray-700 mb-4">New Wood Transaction (BDT/KG)</h3>
+                    <form id="transaction-form" class="space-y-6">
+
+                        <!-- Main Header Inputs -->
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 border-b pb-4 mb-4">
+                            <input type="text" id="challanNumber" placeholder="Challan Number (e.g., C-001)" required class="form-input">
+                            <input type="date" id="transactionDate" required class="form-input">
+                            <select id="dealerName" required class="form-input">
+                                <option value="">Select Dealer</option>
+                                <!-- Dealer options populated by JS -->
+                            </select>
+                            <select id="companyName" required class="form-input">
+                                <option value="">Select Buyer Company</option>
+                                <option value="AKIJ">AKIJ</option>
+                                <option value="RFL">RFL</option>
+                                <option value="SUPER BOARD">SUPER BOARD</option>
+                            </select>
+                        </div>
+
+                        <!-- Dynamic Wood Input Grid -->
+                        <div id="wood-entries" class="space-y-4">
+                            <h4 class="text-lg font-semibold text-gray-700 border-b pb-2">Wood Type Details (Quantity, Buy Rate, Sell Rate)</h4>
+                            <!-- Wood entry rows populated by JS on load -->
+                        </div>
+
+                        <div class="flex justify-end pt-4 border-t">
+                            <button type="submit" class="btn-primary text-white font-bold py-2 px-6 rounded-lg">Record Challan (All Woods)</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Metrics & Report -->
+                <div class="space-y-6">
+                    <h3 class="text-xl font-bold text-gray-700">Financial Overview</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div class="card p-4 bg-lime-50 border-l-4 border-lime-600">
+                            <p class="text-sm text-gray-500">Total Expected Revenue</p>
+                            <p id="metric-revenue" class="text-2xl font-bold text-lime-800">0 BDT</p>
+                        </div>
+                        <div class="card p-4 bg-red-50 border-l-4 border-red-600">
+                            <p class="text-sm text-gray-500">Total Costs</p>
+                            <p id="metric-cost" class="text-2xl font-bold text-red-800">0 BDT</p>
+                        </div>
+                        <div class="card p-4 bg-blue-50 border-l-4 border-blue-600">
+                            <p class="text-sm text-gray-500">Net Profit (Expected)</p>
+                            <p id="metric-profit" class="text-2xl font-bold text-blue-800">0 BDT</p>
+                        </div>
+                        <div class="card p-4 bg-amber-50 border-l-4 border-amber-600">
+                            <p class="text-sm text-gray-500">Total Cash on Hand</p>
+                            <p id="metric-cash" class="text-2xl font-bold text-amber-800">0 BDT</p>
+                        </div>
+                    </div>
+
+                    <!-- All Transactions -->
+                    <div class="card p-6">
+                        <h3 class="text-xl font-bold text-gray-700 mb-4">All Transactions</h3>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Challan</th>
+                                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dealer</th>
+                                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
+                                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wood/Qty(KG)</th>
+                                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Buy/Sell Rate</th>
+                                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Net Profit</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="transactions-list" class="bg-white divide-y divide-gray-200">
+                                    <!-- Transactions data rendered here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Financial Accounts View -->
+            <div id="financial" class="tab-view hidden">
+                <h2 class="text-3xl font-bold text-dark mb-6">Financial Accounts Management</h2>
+
+                <!-- Add New Account Form -->
+                <div class="card p-6 mb-8">
+                    <h3 class="text-xl font-bold text-gray-700 mb-4">Add/Update Account Balance</h3>
+                    <form id="account-form" class="flex flex-col md:flex-row gap-4">
+                        <input type="text" id="accountName" placeholder="Account Name (e.g., Bank, Nagad, Bkash)" required class="form-input flex-grow">
+                        <input type="number" id="accountBalance" placeholder="Initial/New Balance (BDT)" required class="form-input w-full md:w-auto" min="0">
+                        <button type="submit" class="btn-primary text-white font-bold py-2 px-6 rounded-lg w-full md:w-auto">Save/Update Account</button>
+                    </form>
+                </div>
+
+                <!-- Account Balances List -->
+                <div class="card p-6">
+                    <h3 class="text-xl font-bold text-gray-700 mb-4">Current Account Balances</h3>
+                    <div id="accounts-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <!-- Account cards rendered here -->
+                        <p class="text-gray-500 col-span-full">No accounts added yet.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. Dealers & Ledger View -->
+            <div id="dealers" class="tab-view hidden space-y-8">
+                <h2 class="text-3xl font-bold text-dark mb-6">Dealer Advance & Ledger</h2>
+
+                <!-- Manage Dealer/Give Advance -->
+                <div class="card p-6">
+                    <h3 class="text-xl font-bold text-gray-700 mb-4">Add Dealer / Record Advance</h3>
+                    <form id="dealer-advance-form" class="grid grid-cols-1 md:grid-cols-6 gap-4">
+                        <input type="text" id="dealerFullName" placeholder="Dealer Full Name" required class="form-input col-span-full md:col-span-2">
+                        
+                        <div class="col-span-full border-t pt-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <select id="advanceSourceAccount" class="form-input">
+                                <option value="">Fund Source (Optional for New Dealer Only)</option>
+                                <!-- Account options populated by JS -->
+                            </select>
+                            <input type="number" id="advanceAmount" placeholder="Advance Amount (BDT)" class="form-input" min="0">
+                            <input type="text" id="paymentForm" placeholder="Payment Form (e.g., Cash, Cheque)" class="form-input">
+                            <button type="submit" class="btn-primary text-white font-bold py-2 px-4 rounded-lg">Save Dealer / Record Advance</button>
+                            <textarea id="advanceNarration" placeholder="Narration/Personal Comment (Optional)" rows="1" class="form-input col-span-full mt-2"></textarea>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Dealer Current Advances List -->
+                <div class="card p-6">
+                    <h3 class="text-xl font-bold text-gray-700 mb-4">Current Dealer Advances</h3>
+                    <div id="dealer-advances-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <!-- Dealer cards rendered here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. Company Rates View -->
+            <div id="rates" class="tab-view hidden">
+                <h2 class="text-3xl font-bold text-dark mb-6">Buyer Company Selling Rates & Weekly Bills</h2>
+
+                <div class="card p-6">
+                    <h3 class="text-xl font-bold text-gray-700 mb-4">Set Selling Rates (BDT/KG)</h3>
+                    <p class="text-sm text-gray-500 mb-4">Set the agreed selling rate for each wood type per company.</p>
+
+                    <div id="company-rate-sections" class="space-y-8">
+                        <!-- Rate forms and billing summaries for each company rendered by JS -->
+                        <p class="text-gray-500">Loading company rate forms...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        // ====================================================================
+        // GLOBAL MODULE SCOPE VARIABLES (FIX for "db not defined")
+        // These variables are now accessible by all functions defined below.
+        // ====================================================================
+        let fb; // Firebase Modules object
+        let db; // Firestore instance
+        let auth; // Auth instance
+        let userId = null; // Current authenticated user ID
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'wood-supply-app';
+       
+        const authToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        const FIREBASE_URL = "https://www.gstatic.com/firebasejs/11.6.1";
+        // Initialize Firebase
+        const firebaseConfig = {
+  apiKey: "AIzaSyBN_n6L22KECaGFjjsVtQMW6Kf2qmKweI8",
+  authDomain: "wood-business-480012.firebaseapp.com",
+  projectId: "wood-business-480012",
+  storageBucket: "wood-business-480012.firebasestorage.app",
+  messagingSenderId: "398847403538",
+  appId: "1:398847403538:web:837936b5bd6eb0baf3dacb",
+  measurementId: "G-LDHB0D37X5"
+};
+        // Data State (Managed by onSnapshot listeners)
+        let financialAccounts = [];
+        let dealers = [];
+        let companyRates = {};
+        let transactions = [];
+        const companyList = ['AKIJ', 'RFL', 'SUPER BOARD'];
+        const woodTypes = ['Chamble', 'Meheguni', 'Rendi', 'Others'];
+
+        // Data readiness flags (Crucial for preventing premature rendering)
+        let ratesReady = false;
+        let transactionsReady = false;
+
+
+        // ====================================================================
+        // UTILITY FUNCTIONS
+        // ====================================================================
+        const formatBDT = (amount) => {
+            return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'BDT', minimumFractionDigits: 0 }).format(amount);
+        };
+        const formatDate = (timestamp) => {
+            if (!timestamp || !timestamp.toDate) return 'N/A';
+            return timestamp.toDate().toLocaleDateString('en-GB');
+        };
+
+        const getPrivateCollectionPath = (collectionName) => {
+            if (!userId) {
+                console.error(`[ERROR] Tried to access collection '${collectionName}' before userId was set.`);
+                return null;
+            }
+            const path = `artifacts/${appId}/users/${userId}/${collectionName}`;
+            console.log(`[PATH CHECK] Collection: ${collectionName} | Path: ${path}`);
+            return path;
+        };
+
+        const hideLoading = () => {
+            const spinner = document.getElementById('loading-spinner');
+            const container = document.getElementById('app-container');
+            if (spinner && spinner.style.display !== 'none') {
+                console.log("[DEBUG] 7. Hiding loading spinner and showing app container.");
+                spinner.style.display = 'none';
+                container.style.opacity = '1';
+            }
+        };
+        
+        // Function to trigger main UI updates once data is confirmed ready
+        const checkDataReadyAndRender = () => {
+            if (ratesReady && transactionsReady) {
+                // This function is the single entry point for all UI updates that depend on both datasets
+                renderCompanyRateSections();
+                renderTransactionsTable();
+                updateDashboardMetrics();
+                console.log("[DEBUG] 8. Initial data (Rates & Transactions) received. Full UI rendered.");
+            } else {
+                console.log(`[DEBUG] Waiting for data. Rates Ready: ${ratesReady}, Transactions Ready: ${transactionsReady}`);
+            }
+        }
+
+
+        // ====================================================================
+        // 1. FIREBASE INITIALIZATION AND AUTHENTICATION
+        // ====================================================================
+        const initializeFirebase = async () => {
+            console.log("[DEBUG] 1. Starting Application and attempting Firebase Dynamic Import.");
+            
+            try {
+                // Dynamically import all necessary modules: App, Auth, Firestore
+                fb = await Promise.all([
+                    import(`${FIREBASE_URL}/firebase-app.js`),
+                    import(`${FIREBASE_URL}/firebase-auth.js`),
+                    import(`${FIREBASE_URL}/firebase-firestore.js`),
+                ]).then(([appModule, authModule, firestoreModule]) => ({
+                    // App
+                    initializeApp: appModule.initializeApp,
+                    // Auth
+                    getAuth: authModule.getAuth,
+                    signInAnonymously: authModule.signInAnonymously,
+                    signInWithCustomToken: authModule.signInWithCustomToken,
+                    onAuthStateChanged: authModule.onAuthStateChanged,
+                    // Firestore
+                    getFirestore: firestoreModule.getFirestore,
+                    doc: firestoreModule.doc,
+                    setDoc: firestoreModule.setDoc,
+                    addDoc: firestoreModule.addDoc,
+                    onSnapshot: firestoreModule.onSnapshot,
+                    collection: firestoreModule.collection,
+                    updateDoc: firestoreModule.updateDoc,
+                    writeBatch: firestoreModule.writeBatch,
+                    setLogLevel: firestoreModule.setLogLevel,
+                }));
+                
+                // Set Firebase Log Level to Debug immediately after successful import
+                fb.setLogLevel('Debug');
+                console.log("[DEBUG] 2. Firebase modules dynamically imported successfully.");
+
+            } catch (error) {
+                console.error("[CRITICAL ERROR] Failed to load Firebase modules:", error);
+                document.getElementById('user-info').textContent = 'Error: Failed to load core app modules.';
+                hideLoading();
+                return;
+            }
+
+            if (!firebaseConfig || !firebaseConfig.apiKey) {
+                console.error("[CRITICAL ERROR] Firebase config is missing or invalid.");
+                document.getElementById('user-info').textContent = 'Error: Firebase configuration missing.';
+                hideLoading();
+                return;
+            }
+            
+            const app = fb.initializeApp(firebaseConfig);
+            db = fb.getFirestore(app); // Global module scope assignment
+            auth = fb.getAuth(app); // Global module scope assignment
+            
+            const userInfoEl = document.getElementById('user-info');
+            userInfoEl.textContent = 'Authenticating...';
+
+            // 1. Set up the state change observer FIRST. This is the source of truth for userId.
+            fb.onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    userId = user.uid; // Global module scope assignment
+                    userInfoEl.textContent = `User ID: ${userId} | App ID: ${appId}`;
+                    console.log(`[DEBUG] 5. Auth State Changed: User signed in. UID: ${userId}`);
+                    
+                    // 2. Start data listeners only when the user is stable.
+                    startDataListeners();
+                } else {
+                    userId = null;
+                    userInfoEl.textContent = 'Authentication failed or user signed out.';
+                    console.log("[DEBUG] 5b. Auth state changed: No user found.");
+                }
+                
+                // 3. Hide loading screen after the initial check is complete.
+                hideLoading(); 
+            });
+
+            // 4. Kick off the sign-in process (this will trigger the observer above).
+            console.log("[DEBUG] 4. Attempting sign-in...");
+            if (authToken) {
+                await fb.signInWithCustomToken(auth, authToken);
+                console.log("[DEBUG] 4a. Signed in with Custom Token (observer will confirm).");
+            } else {
+                await fb.signInAnonymously(auth);
+                console.log("[DEBUG] 4b. Starting Anonymous sign-in (observer will confirm).");
+            }
+        };
+
+        // ====================================================================
+        // 2. REAL-TIME DATA LISTENERS (onSnapshot)
+        // ====================================================================
+
+        const startDataListeners = () => {
+            if (!userId || !db) {
+                console.error("[ERROR] Cannot start listeners: userId or db not set.");
+                return;
+            }
+            console.log("[DEBUG] 6. Authenticated. Starting onSnapshot listeners now...");
+
+            // Listener 1: Financial Accounts
+            const accountsPath = getPrivateCollectionPath('financial_accounts');
+            if (accountsPath) {
+                fb.onSnapshot(fb.collection(db, accountsPath), (snapshot) => {
+                    financialAccounts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    renderAccounts();
+                    populateAccountSelects();
+                    updateDashboardMetrics();
+                    console.log(`[DEBUG] Listener 1: Financial Accounts updated. Count: ${financialAccounts.length}`);
+                }, (error) => console.error("[ERROR] Listener 1 (Accounts):", error));
+            }
+
+
+            // Listener 2: Dealers
+            const dealersPath = getPrivateCollectionPath('dealers');
+            if (dealersPath) {
+                fb.onSnapshot(fb.collection(db, dealersPath), (snapshot) => {
+                    dealers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    renderDealerAdvances();
+                    populateDealerSelects();
+                    console.log(`[DEBUG] Listener 2: Dealers updated. Count: ${dealers.length}`);
+                }, (error) => console.error("[ERROR] Listener 2 (Dealers):", error));
+            }
+
+            // Listener 3: Company Rates (Triggers checkDataReadyAndRender)
+            const ratesPath = getPrivateCollectionPath('company_rates');
+            if (ratesPath) {
+                fb.onSnapshot(fb.collection(db, ratesPath), (snapshot) => {
+                    companyRates = {};
+                    snapshot.docs.forEach(doc => {
+                        companyRates[doc.id] = doc.data().rates || {};
+                    });
+                    ratesReady = true; // Set flag
+                    checkDataReadyAndRender();
+                    console.log(`[DEBUG] Listener 3: Company Rates updated. Companies: ${Object.keys(companyRates).length}`);
+                }, (error) => console.error("[ERROR] Listener 3 (Rates):", error));
+            }
+
+            // Listener 4: Transactions (Triggers checkDataReadyAndRender)
+            const transactionsPath = getPrivateCollectionPath('transactions');
+            if (transactionsPath) {
+                fb.onSnapshot(fb.collection(db, transactionsPath), (snapshot) => {
+                    transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    transactionsReady = true; // Set flag
+                    checkDataReadyAndRender();
+                    console.log(`[DEBUG] Listener 4: Transactions updated. Count: ${transactions.length}`);
+                }, (error) => console.error("[ERROR] Listener 4 (Transactions):", error));
+            }
+        };
+
+        // ====================================================================
+        // 3. RENDER FUNCTIONS
+        // ====================================================================
+
+        // RENDER 1: Financial Accounts List
+        const renderAccounts = () => {
+            const listEl = document.getElementById('accounts-list');
+            const totalBalance = financialAccounts.reduce((sum, acc) => sum + acc.balance, 0);
+
+            listEl.innerHTML = `
+                <div class="p-4 border-2 border-primary rounded-lg bg-dark text-white shadow-lg col-span-full">
+                    <p class="text-sm font-medium">Total Cash on Hand</p>
+                    <p class="text-3xl font-extrabold">${formatBDT(totalBalance)}</p>
+                </div>
+                ${financialAccounts.map(account => `
+                    <div class="p-4 border border-gray-200 rounded-lg bg-white shadow-md">
+                        <p class="text-sm font-medium text-gray-500">${account.id}</p>
+                        <p class="text-2xl font-extrabold text-dark">${formatBDT(account.balance)}</p>
+                        <p class="text-xs text-gray-400 mt-1">Last Update: ${formatDate(account.lastUpdated)}</p>
+                    </div>
+                `).join('')}`;
+        };
+
+        // RENDER 2: Dealer Advances List
+        const renderDealerAdvances = () => {
+            const listEl = document.getElementById('dealer-advances-list');
+            listEl.innerHTML = dealers.length === 0
+                ? '<p class="text-gray-500 col-span-full">No dealers recorded yet.</p>'
+                : dealers.map(dealer => {
+                    const statusClass = dealer.currentAdvance > 0 ? 'border-red-500' : 'border-green-500';
+                    const statusText = dealer.currentAdvance > 0 ? 'Advance Due' : 'Settled';
+                    return `
+                        <div class="p-4 border-2 ${statusClass} rounded-lg bg-white shadow-md">
+                            <p class="text-base font-semibold text-gray-700">${dealer.name}</p>
+                            <p class="text-2xl font-extrabold text-dark mt-1">${formatBDT(dealer.currentAdvance)}</p>
+                            <p class="text-sm text-gray-500 mt-1">${statusText}</p>
+                        </div>
+                    `;
+                }).join('');
+        };
+
+        // RENDER 3: Company Rate Forms & Billing Summary - ONLY RUNS AFTER ratesReady & transactionsReady
+        const renderCompanyRateSections = () => {
+            const formsEl = document.getElementById('company-rate-sections');
+            const billingData = calculateWeeklyBilling();
+
+            if (!ratesReady || !transactionsReady) {
+                // Safety check, should not happen if called via checkDataReadyAndRender
+                formsEl.innerHTML = '<p class="text-gray-500">Loading initial rate and transaction data...</p>';
+                return;
+            }
+
+            formsEl.innerHTML = companyList.map(company => {
+                const currentRates = companyRates[company] || {};
+                const currentBilling = billingData[company] || { totalRevenue: 0, weeklySummary: [] };
+
+                return `
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 p-4 border rounded-lg border-gray-200 bg-white">
+                        
+                        <!-- Rate Setting Form (Column 1 & 2) -->
+                        <div class="lg:col-span-2 space-y-4">
+                            <h4 class="text-xl font-bold text-dark border-b pb-2">${company} Selling Rates (BDT/KG)</h4>
+                            <form class="space-y-3" data-company="${company}">
+                                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                    ${woodTypes.map(wood => `
+                                        <div>
+                                            <label class="text-xs text-gray-500 block">${wood}</label>
+                                            <input type="number" name="${wood}" placeholder="Rate" value="${currentRates[wood] || ''}" min="0" step="0.01" class="form-input text-sm w-full">
+                                        </div>
+                                    `).join('')}
+                                </div>
+                                <div class="flex justify-end">
+                                    <button type="submit" class="text-xs btn-primary text-white py-2 px-4 rounded-lg">Update Rates</button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Weekly Billing Summary (Column 3) -->
+                        <div class="lg:col-span-1 border-l pl-4 border-gray-100">
+                            <h4 class="text-xl font-bold text-dark border-b pb-2">Amount Owed (Total)</h4>
+                            <p class="text-sm text-gray-500 mt-2 mb-2 font-semibold">Total Revenue: <span class="text-lg text-blue-600">${formatBDT(currentBilling.totalRevenue)}</span></p>
+                            
+                            <h5 class="text-sm font-semibold mt-4 mb-2">Weekly Breakdowns:</h5>
+                            <ul class="text-sm space-y-2 max-h-40 overflow-y-auto">
+                                ${currentBilling.weeklySummary.length === 0 ? 
+                                    '<li class="text-gray-400">No transactions recorded.</li>' :
+                                    currentBilling.weeklySummary.map(item => `
+                                        <li class="flex justify-between items-center p-2 bg-gray-50 rounded-lg">
+                                            <span class="text-xs font-medium text-gray-600">Week of ${item.weekStart}</span>
+                                            <span class="font-bold text-sm text-blue-700">${formatBDT(item.totalRevenue)}</span>
+                                        </li>
+                                    `).join('')
+                                }
+                            </ul>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Attach submit listeners to the dynamically created forms
+            document.querySelectorAll('#company-rate-sections form').forEach(form => {
+                form.onsubmit = handleRateFormSubmit;
+            });
+            updateSellingRates(); // Ensure transaction form rates are updated too
+        };
+        
+        // Helper to calculate weekly billing (used in both dashboard metrics and rate sections)
+        const calculateWeeklyBilling = () => {
+            const billingMap = {};
+
+            transactions.forEach(t => {
+                const date = t.date.toDate();
+                // Get Monday of the week (assuming ISO week start)
+                const day = date.getDay(); // 0 = Sunday, 1 = Monday
+                const diff = date.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
+                const weekStart = new Date(date.setDate(diff));
+                weekStart.setHours(0, 0, 0, 0);
+                const weekKey = `${t.companyName}-${weekStart.toISOString().slice(0, 10)}`;
+
+                if (!billingMap[t.companyName]) {
+                    billingMap[t.companyName] = { totalRevenue: 0, weeklySummary: {} };
+                }
+
+                if (!billingMap[t.companyName].weeklySummary[weekKey]) {
+                    billingMap[t.companyName].weeklySummary[weekKey] = {
+                        company: t.companyName,
+                        weekStart: weekStart.toLocaleDateString('en-GB'),
+                        totalRevenue: 0
+                    };
+                }
+
+                // Sum up the total revenue for the billing summary (expected revenue)
+                billingMap[t.companyName].weeklySummary[weekKey].totalRevenue += t.expectedRevenue;
+                billingMap[t.companyName].totalRevenue += t.expectedRevenue;
+            });
+
+            // Convert weeklySummary object to array and sort
+            for (const company in billingMap) {
+                // Recalculate total revenue based on all transactions for that company
+                billingMap[company].totalRevenue = transactions.filter(t => t.companyName === company).reduce((sum, t) => sum + t.expectedRevenue, 0);
+
+                billingMap[company].weeklySummary = Object.values(billingMap[company].weeklySummary).sort((a, b) => new Date(b.weekStart) - new Date(a.weekStart));
+            }
+
+            return billingMap;
+        }
+
+
+        // RENDER 4: Transactions Table - ONLY RUNS AFTER transactionsReady
+        const renderTransactionsTable = () => {
+            const tableBody = document.getElementById('transactions-list');
+            
+            if (!transactionsReady) {
+                tableBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-gray-400">Loading transaction data...</td></tr>';
+                return;
+            }
+            
+            const sortedTransactions = [...transactions].sort((a, b) => b.date.toDate() - a.date.toDate());
+
+            if (sortedTransactions.length === 0) {
+                 tableBody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-gray-400">No transactions recorded yet.</td></tr>';
+                 return;
+            }
+
+            tableBody.innerHTML = sortedTransactions.map(t => {
+                const profit = t.expectedRevenue - t.cost;
+                const profitClass = profit >= 0 ? 'text-green-600' : 'text-red-600';
+                
+                return `
+                    <tr class="hover:bg-gray-50 transition">
+                        <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-500">${formatDate(t.date)}</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-sm font-medium text-dark">${t.challanNumber}</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-700">${t.dealerName}</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-sm font-semibold text-primary">${t.companyName}</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-700">${t.woodType} / ${t.quantityKg} KG</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-sm text-right">
+                            <span class="text-red-600">${t.buyingRate.toFixed(2)}</span> / <span class="text-green-600">${t.sellingRateManual.toFixed(2)}</span>
+                        </td>
+                        <td class="px-3 py-2 whitespace-nowrap text-sm font-bold text-right ${profitClass}">${formatBDT(profit)}</td>
+                    </tr>
+                `;
+            }).join('');
+        };
+
+        // RENDER 5: Dashboard Metrics - ONLY RUNS AFTER ratesReady & transactionsReady
+        const updateDashboardMetrics = () => {
+            let totalRevenue = 0;
+            let totalCost = 0;
+            let totalCashOnHand = financialAccounts.reduce((sum, acc) => sum + acc.balance, 0);
+
+            transactions.forEach(t => {
+                totalRevenue += t.expectedRevenue;
+                totalCost += t.cost;
+            });
+
+            document.getElementById('metric-revenue').textContent = formatBDT(totalRevenue);
+            document.getElementById('metric-cost').textContent = formatBDT(totalCost);
+            document.getElementById('metric-profit').textContent = formatBDT(totalRevenue - totalCost);
+            document.getElementById('metric-cash').textContent = formatBDT(totalCashOnHand);
+        };
+
+
+        // ====================================================================
+        // 4. FORM AND INTERACTION HANDLERS
+        // ====================================================================
+
+        // Populate Select elements
+        const populateAccountSelects = () => {
+            const selects = [document.getElementById('advanceSourceAccount')];
+            selects.forEach(select => {
+                if (!select) return;
+                const currentValue = select.value;
+                select.innerHTML = '<option value="">Fund Source (Optional for New Dealer Only)</option>';
+                financialAccounts.forEach(account => {
+                    const option = document.createElement('option');
+                    option.value = account.id;
+                    option.textContent = `${account.id} (${formatBDT(account.balance)})`;
+                    if (account.id === currentValue) option.selected = true;
+                    select.appendChild(option);
+                });
+            });
+        };
+
+        const populateDealerSelects = () => {
+            const selects = [document.getElementById('dealerName')];
+            selects.forEach(select => {
+                if (!select) return;
+                const currentValue = select.value;
+                select.innerHTML = '<option value="">Select Dealer</option>';
+                dealers.forEach(dealer => {
+                    const option = document.createElement('option');
+                    option.value = dealer.name;
+                    option.textContent = `${dealer.name}`; 
+                    if (dealer.name === currentValue) option.selected = true;
+                    select.appendChild(option);
+                });
+            });
+            // Calling this once after population to trigger rate cleanup
+            const dealerSelect = document.getElementById('dealerName');
+            if (dealerSelect) dealerSelect.dispatchEvent(new Event('change'));
+        };
+        
+        // RENDER WOOD ENTRIES FOR TRANSACTION FORM
+        const renderWoodEntries = () => {
+            const container = document.getElementById('wood-entries');
+            container.innerHTML = woodTypes.map(wood => `
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 p-3 border rounded-lg bg-gray-50 items-center">
+                    <div class="font-bold text-sm text-dark">${wood}</div>
+                    <input type="number" data-wood="${wood}" data-field="quantity" placeholder="Quantity (KG)" min="0" step="1" value="0" class="form-input text-sm">
+                    <input type="number" data-wood="${wood}" data-field="buyRate" placeholder="Buying Rate (BDT/KG)" min="0" step="0.01" required class="form-input text-sm">
+                    <input type="text" data-wood="${wood}" data-field="sellRate" placeholder="Selling Rate (Calculated)" readonly class="form-input text-sm bg-amber-50 cursor-not-allowed">
+                </div>
+            `).join('');
+            
+            // Re-attach listeners for dynamic rate updates
+            const companySelect = document.getElementById('companyName');
+            if (companySelect) companySelect.addEventListener('change', updateSellingRates);
+
+            document.querySelectorAll('#wood-entries input[data-field="buyRate"]').forEach(input => {
+                 input.addEventListener('input', () => {
+                     // Ensure quantity is not zero if a rate is entered
+                     const quantityInput = document.querySelector(`#wood-entries input[data-wood="${input.getAttribute('data-wood')}"][data-field="quantity"]`);
+                     if (parseFloat(input.value) > 0 && parseFloat(quantityInput.value) === 0) {
+                         quantityInput.value = 1; 
+                     }
+                 });
+            });
+            
+            // Initial calls
+            updateSellingRates();
+        };
+
+        // Dynamic Selling Rate Update
+        const updateSellingRates = () => {
+            const companyName = document.getElementById('companyName').value;
+            const rates = companyRates[companyName] || {};
+            
+            woodTypes.forEach(wood => {
+                const rate = rates[wood] || 0;
+                const rateInput = document.querySelector(`#wood-entries input[data-wood="${wood}"][data-field="sellRate"]`);
+                if (rateInput) {
+                    rateInput.value = rate > 0 ? rate.toFixed(2) + ' BDT' : 'Rate Not Set';
+                    rateInput.dataset.rateValue = rate; // Store raw number for calculation
+                }
+            });
+        };
+        
+        // Financial Account Form Submission
+        const handleAccountFormSubmit = async (e) => {
+            e.preventDefault();
+            
+            // Check if db is initialized (Fix for "db not defined")
+            if (!db) {
+                console.error("Firebase not initialized. Cannot submit form.");
+                return;
+            }
+
+            const accountName = document.getElementById('accountName').value.trim();
+            const balance = parseFloat(document.getElementById('accountBalance').value);
+
+            if (!userId || !accountName || isNaN(balance) || balance < 0) {
+                console.error("Invalid account input or unauthenticated.");
+                return;
+            }
+
+            try {
+                await fb.setDoc(fb.doc(db, getPrivateCollectionPath('financial_accounts'), accountName), {
+                    balance: balance,
+                    lastUpdated: new Date()
+                }, { merge: true }); // Use merge so existing accounts can be updated
+                console.log('Success: Account balance updated/created!');
+                e.target.reset();
+            } catch (error) {
+                console.error("Error setting account balance:", error);
+                console.error(`Error: Could not save account. Check console.`);
+            }
+        };
+
+        // Dealer Advance/Rate Form Submission
+        const handleDealerAdvanceFormSubmit = async (e) => {
+            e.preventDefault();
+            
+            // Check if db is initialized (Fix for "db not defined")
+            if (!db) {
+                console.error("Firebase not initialized. Cannot submit form.");
+                return;
+            }
+
+            const form = e.target;
+            const dealerFullName = form.dealerFullName.value.trim();
+            
+            // Advance specific fields (optional)
+            const sourceAccountName = form.advanceSourceAccount.value;
+            const advanceAmount = parseFloat(form.advanceAmount.value) || 0;
+            const paymentForm = form.paymentForm.value.trim();
+            const narration = form.advanceNarration.value.trim();
+
+            if (!userId || dealerFullName.length === 0) {
+                console.error('Please fill the Dealer Full Name.');
+                return;
+            }
+
+            // Check advance requirements if amount is > 0
+            if (advanceAmount > 0) {
+                if (!sourceAccountName) {
+                    console.error('If you are recording an Advance, you must select a Fund Source Account.');
+                    return;
+                }
+                const sourceAccount = financialAccounts.find(acc => acc.id === sourceAccountName);
+                if (!sourceAccount || sourceAccount.balance < advanceAmount) {
+                    console.error(`Error: Insufficient balance in ${sourceAccountName}. Current: ${formatBDT(sourceAccount ? sourceAccount.balance : 0)}`);
+                    return;
+                }
+            }
+
+            const batch = fb.writeBatch(db);
+            const dealerRef = fb.doc(db, getPrivateCollectionPath('dealers'), dealerFullName);
+
+            // 1. Update Dealer Advance (Initial/Existing dealer update)
+            const currentDealer = dealers.find(d => d.name === dealerFullName);
+            const initialAdvance = currentDealer ? currentDealer.currentAdvance : 0;
+            const newAdvance = initialAdvance + advanceAmount;
+            
+            // Prepare dealer data
+            const dealerData = {
+                name: dealerFullName,
+                currentAdvance: newAdvance,
+            };
+            
+            batch.set(dealerRef, dealerData, { merge: true });
+
+            // 2. Process Advance Transaction if amount > 0
+            if (advanceAmount > 0) {
+                const accountRef = fb.doc(db, getPrivateCollectionPath('financial_accounts'), sourceAccountName);
+                const sourceAccount = financialAccounts.find(acc => acc.id === sourceAccountName);
+                
+                // Deduct from Financial Account
+                const newAccountBalance = sourceAccount.balance - advanceAmount;
+                batch.update(accountRef, {
+                    balance: newAccountBalance,
+                    lastUpdated: new Date()
+                });
+
+                // Record Ledger Entry
+                batch.set(fb.doc(fb.collection(db, getPrivateCollectionPath('dealer_ledger'))), {
+                    dealerName: dealerFullName,
+                    type: 'Advance Given',
+                    amount: advanceAmount,
+                    sourceAccount: sourceAccountName,
+                    date: new Date(),
+                    paymentForm: paymentForm,
+                    narration: narration
+                });
+            }
+
+
+            try {
+                await batch.commit();
+                
+                let message = `Success: Dealer ${dealerFullName} updated.`;
+                if (advanceAmount > 0) {
+                    message += ` ${formatBDT(advanceAmount)} advance also recorded and deducted.`;
+                }
+
+                console.log(message);
+                form.reset();
+            } catch (error) {
+                console.error("Error processing dealer update/advance:", error);
+                console.error('Error: Could not save dealer or advance. Check console.');
+            }
+        };
+
+        // Company Rate Form Submission (Generic handler for all rate forms)
+        const handleRateFormSubmit = async (e) => {
+            e.preventDefault();
+            
+            // Check if db is initialized (Fix for "db not defined")
+            if (!db) {
+                console.error("Firebase not initialized. Cannot submit form.");
+                return;
+            }
+
+            const companyName = e.target.getAttribute('data-company');
+            const formData = new FormData(e.target);
+            const rates = {};
+
+            woodTypes.forEach(wood => {
+                const value = parseFloat(formData.get(wood));
+                if (!isNaN(value) && value >= 0) {
+                    rates[wood] = value;
+                }
+            });
+
+            if (!companyName || Object.keys(rates).length === 0) {
+                console.error('Please enter at least one valid rate.');
+                return;
+            }
+
+            try {
+                await fb.setDoc(fb.doc(db, getPrivateCollectionPath('company_rates'), companyName), {
+                    rates: rates,
+                    lastUpdated: new Date()
+                });
+                console.log(`Success: ${companyName} rates updated.`);
+            } catch (error) {
+                console.error("Error setting company rates:", error);
+                console.error('Error: Could not save rates. Check console.');
+            }
+        };
+
+        // Main Transaction Form Submission
+        const handleTransactionFormSubmit = async (e) => {
+            e.preventDefault();
+            
+            // Check if db is initialized (Fix for "db not defined")
+            if (!db) {
+                console.error("Firebase not initialized. Cannot submit form.");
+                return;
+            }
+
+            const form = e.target;
+            const challanNumber = form.challanNumber.value.trim();
+            const transactionDate = new Date(form.transactionDate.value);
+            const dealerName = form.dealerName.value;
+            const companyName = form.companyName.value;
+            
+            if (!userId || !challanNumber || !transactionDate || !dealerName || !companyName) {
+                console.error('Please fill the Challan, Date, Dealer, and Company details.');
+                return;
+            }
+            
+            const transactionsToAdd = [];
+            let totalProfit = 0;
+            let transactionCount = 0;
+            let hasError = false;
+
+            woodTypes.forEach(wood => {
+                const quantityInput = document.querySelector(`#wood-entries input[data-wood="${wood}"][data-field="quantity"]`);
+                const buyRateInput = document.querySelector(`#wood-entries input[data-wood="${wood}"][data-field="buyRate"]`);
+                const sellRateInput = document.querySelector(`#wood-entries input[data-wood="${wood}"][data-field="sellRate"]`);
+
+                const quantityKg = parseFloat(quantityInput.value) || 0;
+                const buyingRate = parseFloat(buyRateInput.value) || 0;
+                // Read the stored numeric value
+                const sellingRateManual = parseFloat(sellRateInput.dataset.rateValue) || 0; 
+
+                if (quantityKg > 0) {
+                    // Validation Check
+                    if (buyingRate <= 0) {
+                        console.error(`Error: Buying rate for ${wood} is zero/invalid (${buyingRate}). Please manually enter the cost rate.`);
+                        hasError = true;
+                        return;
+                    }
+                    if (sellingRateManual <= 0) {
+                        console.error(`Error: Selling rate for ${wood} is zero/invalid (${sellingRateManual}). Please set the rate in the 'Company Rates' section.`);
+                        hasError = true;
+                        return;
+                    }
+
+
+                    const expectedRevenue = quantityKg * sellingRateManual;
+                    const cost = quantityKg * buyingRate;
+                    const profit = expectedRevenue - cost;
+                    totalProfit += profit;
+                    transactionCount++;
+
+                    transactionsToAdd.push({
+                        challanNumber,
+                        date: transactionDate,
+                        dealerName,
+                        companyName,
+                        woodType: wood,
+                        quantityKg,
+                        buyingRate: buyingRate, // Store the actual rate used
+                        sellingRateManual: sellingRateManual, // Store the actual rate used
+                        expectedRevenue,
+                        cost,
+                        profit: profit,
+                        recordedAt: new Date()
+                    });
+                }
+            });
+
+            if (hasError) {
+                console.error("Transaction stopped due to missing/invalid rates.");
+                return;
+            }
+
+            if (transactionsToAdd.length === 0) {
+                console.error('Please enter a quantity greater than zero for at least one wood type.');
+                return;
+            }
+
+            const batch = fb.writeBatch(db);
+            transactionsToAdd.forEach(t => {
+                batch.set(fb.doc(fb.collection(db, getPrivateCollectionPath('transactions'))), t);
+            });
+
+            try {
+                await batch.commit();
+                console.log(`Successfully recorded ${transactionCount} transaction(s) under Challan ${challanNumber}. Estimated Total Profit: ${formatBDT(totalProfit)}.`);
+                form.reset();
+                renderWoodEntries(); // Reset wood inputs and re-run rate population
+                document.getElementById('transactionDate').valueAsDate = new Date();
+            } catch (error) {
+                console.error("Error recording transactions batch:", error);
+                console.error('Error: Could not record transactions. Check console.');
+            }
+        };
+
+        // ====================================================================
+        // 5. UI LOGIC (TAB SWITCHING)
+        // ====================================================================
+
+        const setupUIListeners = () => {
+            // Tab Switching Logic
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const target = e.target.getAttribute('data-target');
+
+                    document.querySelectorAll('.tab-button').forEach(btn => {
+                        btn.classList.remove('active', 'bg-primary', 'text-white');
+                        btn.classList.add('text-gray-700', 'hover:bg-gray-100');
+                    });
+
+                    e.target.classList.add('active', 'bg-primary', 'text-white');
+                    e.target.classList.remove('text-gray-700', 'hover:bg-gray-100');
+
+                    document.querySelectorAll('.tab-view').forEach(view => view.classList.add('hidden'));
+                    document.getElementById(target).classList.remove('hidden');
+                });
+            });
+            
+            // Set default date for transaction
+            const transactionDateEl = document.getElementById('transactionDate');
+            if (transactionDateEl) transactionDateEl.valueAsDate = new Date();
+
+            // Attach Form Submit Handlers
+            const accountForm = document.getElementById('account-form');
+            if (accountForm) accountForm.onsubmit = handleAccountFormSubmit;
+            
+            const dealerForm = document.getElementById('dealer-advance-form');
+            if (dealerForm) dealerForm.onsubmit = handleDealerAdvanceFormSubmit;
+            
+            const transactionForm = document.getElementById('transaction-form');
+            if (transactionForm) transactionForm.onsubmit = handleTransactionFormSubmit;
+            
+            // Initial wood entries render
+            renderWoodEntries();
+        };
+
+        // ====================================================================
+        // 6. START APPLICATION
+        // ====================================================================
+
+        const main = async () => {
+            await initializeFirebase();
+            setupUIListeners();
+            
+            // Initial call to ensure placeholders are set while waiting for data
+            renderCompanyRateSections();
+            renderTransactionsTable();
+        };
+
+        window.onload = main;
+    </script>
+</body>
+</html>
