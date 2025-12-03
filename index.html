@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wood Supply Tracker (BDT/KG)</title>
+    <title>HH Enterprise: Wood Supply Tracker</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Font: Inter -->
@@ -52,6 +52,43 @@
             background-color: #e68a00;
             transform: translateY(-1px);
         }
+        .ledger-row.deposit { border-left: 4px solid #10b981; } /* Green for positive */
+        .ledger-row.withdrawal { border-left: 4px solid #ef4444; } /* Red for negative */
+        
+        /* Modal Fix: Ensure Z-index is high and fixed positioning */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 50; /* Tailwind z-50 */
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        
+        /* Print Styles */
+        @media print {
+            body > * { display: none !important; } /* Hide everything by default */
+            .printable-report { 
+                display: block !important; 
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                margin: 0;
+                padding: 20px;
+                background: white;
+            }
+            .printable-report h2, .printable-report h3 { color: black !important; }
+            .printable-report .no-print { display: none !important; }
+            .printable-report table { width: 100%; border-collapse: collapse; }
+            .printable-report th, .printable-report td { padding: 8px; border: 1px solid #ddd; }
+            .printable-report thead { background-color: #f3f4f6; }
+        }
     </style>
 </head>
 <body class="min-h-screen">
@@ -63,14 +100,24 @@
 
     <div id="app-container" class="max-w-7xl mx-auto p-4 md:p-8 opacity-0 transition-opacity duration-500">
         <!-- Header and Auth Info -->
-        <header class="mb-8 border-b-4 border-amber-600 pb-4">
-            <h1 class="text-4xl font-extrabold text-gray-800 tracking-tight">Wood Supply Ledger</h1>
+        <header class="mb-8 border-b-4 border-amber-600 pb-4 flex justify-between items-center">
+            <div class="flex items-center">
+                <!-- HH Enterprise Logo SVG -->
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-amber-700 mr-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path fill="#795548" stroke="#ff9800" d="M12 2L12 22M2 12L22 12M12 2A10 10 0 0 1 22 12A10 10 0 0 1 12 22A10 10 0 0 1 2 12A10 10 0 0 1 12 2Z" />
+                    <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Inter, sans-serif" font-size="8" fill="white" font-weight="900">HH</text>
+                </svg>
+                <div>
+                    <h1 class="text-4xl font-extrabold text-gray-800 tracking-tight">HH Enterprise Ledger</h1>
+                    <p class="text-sm font-medium text-amber-700">Wood Supply Account Manager</p>
+                </div>
+            </div>
             <p id="user-info" class="text-sm text-gray-500 mt-1">Status: Initializing...</p>
         </header>
 
         <!-- Navigation Tabs -->
         <nav class="flex flex-wrap gap-2 mb-8">
-            <button class="tab-button active px-4 py-2 rounded-lg font-semibold text-sm transition" data-target="dashboard">Dashboard/Report</button>
+            <button class="tab-button active px-4 py-2 rounded-lg font-semibold text-sm transition" data-target="dashboard">Dashboard/Entry</button>
             <button class="tab-button px-4 py-2 rounded-lg font-semibold text-sm text-gray-700 hover:bg-gray-100 transition" data-target="financial">Financial Accounts</button>
             <button class="tab-button px-4 py-2 rounded-lg font-semibold text-sm text-gray-700 hover:bg-gray-100 transition" data-target="dealers">Dealers & Ledger</button>
             <button class="tab-button px-4 py-2 rounded-lg font-semibold text-sm text-gray-700 hover:bg-gray-100 transition" data-target="rates">Company Rates & Billing</button>
@@ -84,7 +131,7 @@
                 <h2 class="text-3xl font-bold text-dark mb-6">Main Report & Transaction Entry</h2>
 
                 <!-- Transaction Entry Form -->
-                <div class="card p-6">
+                <div class="card p-6 relative">
                     <h3 class="text-xl font-bold text-gray-700 mb-4">New Wood Transaction (BDT/KG)</h3>
                     <form id="transaction-form" class="space-y-6">
 
@@ -150,8 +197,8 @@
                                         <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dealer</th>
                                         <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
                                         <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wood/Qty(KG)</th>
-                                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Buy/Sell Rate</th>
                                         <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Net Profit</th>
+                                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="transactions-list" class="bg-white divide-y divide-gray-200">
@@ -164,15 +211,16 @@
             </div>
 
             <!-- 2. Financial Accounts View -->
-            <div id="financial" class="tab-view hidden">
-                <h2 class="text-3xl font-bold text-dark mb-6">Financial Accounts Management</h2>
+            <div id="financial" class="tab-view hidden space-y-8">
+                <h2 class="text-3xl font-bold text-dark mb-6">Financial Accounts Management & Report</h2>
 
                 <!-- Add New Account Form -->
                 <div class="card p-6 mb-8">
                     <h3 class="text-xl font-bold text-gray-700 mb-4">Add/Update Account Balance</h3>
                     <form id="account-form" class="flex flex-col md:flex-row gap-4">
                         <input type="text" id="accountName" placeholder="Account Name (e.g., Bank, Nagad, Bkash)" required class="form-input flex-grow">
-                        <input type="number" id="accountBalance" placeholder="Initial/New Balance (BDT)" required class="form-input w-full md:w-auto" min="0">
+                        <input type="number" id="accountBalance" placeholder="New Balance (BDT)" required class="form-input w-full md:w-auto" min="0">
+                        <input type="date" id="accountDate" required class="form-input w-full md:w-auto">
                         <button type="submit" class="btn-primary text-white font-bold py-2 px-6 rounded-lg w-full md:w-auto">Save/Update Account</button>
                     </form>
                 </div>
@@ -185,6 +233,24 @@
                         <p class="text-gray-500 col-span-full">No accounts added yet.</p>
                     </div>
                 </div>
+
+                <!-- Account Ledger Report -->
+                <div class="card p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-bold text-gray-700">Account Ledger (Transaction History)</h3>
+                        <button onclick="printReport('financial-ledger-report')" class="no-print text-sm bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-lg font-semibold flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 4v3H4a2 2 0 00-2 2v6a2 2 0 002 2h12a2 2 0 002-2v-6a2 2 0 00-2-2h-1V4a2 2 0 00-2-2H7a2 2 0 00-2 2zm4 2a1 1 0 10-2 0v1h2V6zm2-1h2v2h-2V5zm-4 7H4v1h1v-1zm10 0h-1v1h1v-1zm-9 3H4v1h1v-1zm10 0h-1v1h1v-1z" clip-rule="evenodd" /></svg>
+                            Print Report
+                        </button>
+                    </div>
+                    <div id="financial-ledger-report" class="printable-report">
+                        <h2 class="text-2xl font-bold mb-4 print-only hidden">Financial Account Ledger - HH Enterprise</h2>
+                        <div id="account-ledger-list" class="space-y-3">
+                            <!-- Account ledger entries rendered here -->
+                            <p class="text-gray-500">Loading ledger history...</p>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- 3. Dealers & Ledger View -->
@@ -194,16 +260,16 @@
                 <!-- Manage Dealer/Give Advance -->
                 <div class="card p-6">
                     <h3 class="text-xl font-bold text-gray-700 mb-4">Add Dealer / Record Advance</h3>
-                    <form id="dealer-advance-form" class="grid grid-cols-1 md:grid-cols-6 gap-4">
+                    <form id="dealer-advance-form" class="grid grid-cols-1 md:grid-cols-5 gap-4">
                         <input type="text" id="dealerFullName" placeholder="Dealer Full Name" required class="form-input col-span-full md:col-span-2">
                         
                         <div class="col-span-full border-t pt-4 grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <select id="advanceSourceAccount" class="form-input">
-                                <option value="">Fund Source (Optional for New Dealer Only)</option>
+                            <select id="advanceSourceAccount" required class="form-input">
+                                <option value="">Fund Source Account</option>
                                 <!-- Account options populated by JS -->
                             </select>
-                            <input type="number" id="advanceAmount" placeholder="Advance Amount (BDT)" class="form-input" min="0">
-                            <input type="text" id="paymentForm" placeholder="Payment Form (e.g., Cash, Cheque)" class="form-input">
+                            <input type="number" id="advanceAmount" placeholder="Advance Amount (BDT)" required class="form-input" min="1">
+                            <input type="date" id="advanceDate" required class="form-input">
                             <button type="submit" class="btn-primary text-white font-bold py-2 px-4 rounded-lg">Save Dealer / Record Advance</button>
                             <textarea id="advanceNarration" placeholder="Narration/Personal Comment (Optional)" rows="1" class="form-input col-span-full mt-2"></textarea>
                         </div>
@@ -215,6 +281,24 @@
                     <h3 class="text-xl font-bold text-gray-700 mb-4">Current Dealer Advances</h3>
                     <div id="dealer-advances-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         <!-- Dealer cards rendered here -->
+                    </div>
+                </div>
+                
+                <!-- Dealer Ledger Report -->
+                <div class="card p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-bold text-gray-700">Dealer Ledger (Advance History)</h3>
+                        <button onclick="printReport('dealer-ledger-report')" class="no-print text-sm bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-lg font-semibold flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 4v3H4a2 2 0 00-2 2v6a2 2 0 002 2h12a2 2 0 002-2v-6a2 2 0 00-2-2h-1V4a2 2 0 00-2-2H7a2 2 0 00-2 2zm4 2a1 1 0 10-2 0v1h2V6zm2-1h2v2h-2V5zm-4 7H4v1h1v-1zm10 0h-1v1h1v-1zm-9 3H4v1h1v-1zm10 0h-1v1h1v-1z" clip-rule="evenodd" /></svg>
+                            Print Report
+                        </button>
+                    </div>
+                    <div id="dealer-ledger-report" class="printable-report">
+                        <h2 class="text-2xl font-bold mb-4 print-only hidden">Dealer Advance Ledger - HH Enterprise</h2>
+                        <div id="dealer-ledger-list" class="space-y-3">
+                            <!-- Dealer ledger entries rendered here -->
+                            <p class="text-gray-500">Loading ledger history...</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -235,12 +319,51 @@
             </div>
         </div>
     </div>
+    
+    <!-- Transaction Edit Form/Modal -->
+    <div id="edit-transaction-modal" class="modal-overlay hidden">
+        <div class="card p-8 w-full max-w-2xl">
+            <h3 class="text-2xl font-bold text-gray-700 mb-6 border-b pb-3">Edit Transaction Entry</h3>
+            <form id="edit-transaction-form" class="space-y-4">
+                <input type="hidden" id="edit-transaction-id">
+                <div class="grid grid-cols-2 gap-4">
+                    <input type="text" id="edit-challanNumber" placeholder="Challan Number" required class="form-input">
+                    <input type="date" id="edit-transactionDate" required class="form-input">
+                    <select id="edit-dealerName" required class="form-input"></select>
+                    <input type="text" id="edit-woodType" readonly class="form-input bg-gray-100 cursor-not-allowed">
+                    <input type="number" id="edit-quantityKg" placeholder="Quantity (KG)" min="0" step="1" required class="form-input">
+                    <input type="number" id="edit-buyingRate" placeholder="Buying Rate (BDT/KG)" min="0" step="0.01" required class="form-input">
+                    <input type="number" id="edit-sellingRateManual" placeholder="Selling Rate (BDT/KG)" min="0" step="0.01" required class="form-input">
+                </div>
+                
+                <div class="flex justify-between items-center pt-4 border-t">
+                    <button type="button" id="open-delete-confirm-btn" class="text-red-600 hover:underline font-semibold">Delete Entry</button>
+                    <div class="space-x-4">
+                        <button type="button" id="close-edit-modal" class="px-4 py-2 rounded-lg text-gray-700 hover:bg-gray-100">Cancel</button>
+                        <button type="submit" class="btn-primary text-white font-bold py-2 px-4 rounded-lg">Save Changes</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Custom Delete Confirmation Modal -->
+    <div id="delete-confirm-modal" class="modal-overlay hidden">
+        <div class="card p-6 w-full max-w-sm text-center">
+            <h4 class="text-xl font-bold text-red-600 mb-4">Confirm Deletion</h4>
+            <p class="text-gray-700 mb-6">Are you sure you want to permanently delete this transaction entry? This action cannot be undone.</p>
+            <div class="flex justify-center space-x-4">
+                <button type="button" id="cancel-delete-btn" class="px-4 py-2 rounded-lg text-gray-700 border hover:bg-gray-100">Cancel</button>
+                <button type="button" id="confirm-delete-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">Confirm Delete</button>
+            </div>
+        </div>
+    </div>
+
 
     <!-- Firebase SDKs -->
     <script type="module">
         // ====================================================================
-        // GLOBAL MODULE SCOPE VARIABLES (FIX for "db not defined")
-        // These variables are now accessible by all functions defined below.
+        // GLOBAL MODULE SCOPE VARIABLES 
         // ====================================================================
         let fb; // Firebase Modules object
         let db; // Firestore instance
@@ -248,31 +371,46 @@
         let userId = null; // Current authenticated user ID
 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'wood-supply-app';
-       
         const authToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         const FIREBASE_URL = "https://www.gstatic.com/firebasejs/11.6.1";
+
         // Initialize Firebase
         const firebaseConfig = {
-  apiKey: "AIzaSyBN_n6L22KECaGFjjsVtQMW6Kf2qmKweI8",
-  authDomain: "wood-business-480012.firebaseapp.com",
-  projectId: "wood-business-480012",
-  storageBucket: "wood-business-480012.firebasestorage.app",
-  messagingSenderId: "398847403538",
-  appId: "1:398847403538:web:837936b5bd6eb0baf3dacb",
-  measurementId: "G-LDHB0D37X5"
-};
+        apiKey: "AIzaSyBN_n6L22KECaGFjjsVtQMW6Kf2qmKweI8",
+        authDomain: "wood-business-480012.firebaseapp.com",
+        projectId: "wood-business-480012",
+        storageBucket: "wood-business-480012.firebasestorage.app",
+        messagingSenderId: "398847403538",
+        appId: "1:398847403538:web:837936b5bd6eb0baf3dacb",
+        measurementId: "G-LDHB0D37X5"
+        };
+        
         // Data State (Managed by onSnapshot listeners)
         let financialAccounts = [];
         let dealers = [];
         let companyRates = {};
         let transactions = [];
+        let accountLedger = []; // New ledger data
+        let dealerLedger = [];  // New ledger data
+        
         const companyList = ['AKIJ', 'RFL', 'SUPER BOARD'];
         const woodTypes = ['Chamble', 'Meheguni', 'Rendi', 'Others'];
 
         // Data readiness flags (Crucial for preventing premature rendering)
         let ratesReady = false;
         let transactionsReady = false;
+        let ledgerReady = false;
+        
+        // --- NEW: Date range filter for Company Rates Report ---
+        const today = new Date();
+        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+        const todayString = today.toISOString().slice(0, 10);
 
+        let rateReportRange = {
+            startDate: firstDayOfMonth, // Default to 1st of current month
+            endDate: todayString // Default to today
+        };
+        // --------------------------------------------------------
 
         // ====================================================================
         // UTILITY FUNCTIONS
@@ -283,6 +421,12 @@
         const formatDate = (timestamp) => {
             if (!timestamp || !timestamp.toDate) return 'N/A';
             return timestamp.toDate().toLocaleDateString('en-GB');
+        };
+        const formatInputDate = (timestamp) => {
+            if (!timestamp || !timestamp.toDate) return '';
+            // Ensure date is UTC to prevent timezone offsets causing wrong day display
+            const date = timestamp.toDate();
+            return date.toISOString().slice(0, 10);
         };
 
         const getPrivateCollectionPath = (collectionName) => {
@@ -307,15 +451,45 @@
         
         // Function to trigger main UI updates once data is confirmed ready
         const checkDataReadyAndRender = () => {
-            if (ratesReady && transactionsReady) {
-                // This function is the single entry point for all UI updates that depend on both datasets
+            if (ratesReady && transactionsReady && ledgerReady) {
+                // This function is the single entry point for all UI updates that depend on all datasets
                 renderCompanyRateSections();
                 renderTransactionsTable();
                 updateDashboardMetrics();
-                console.log("[DEBUG] 8. Initial data (Rates & Transactions) received. Full UI rendered.");
+                renderAccountLedger();
+                renderDealerLedger();
+                console.log("[DEBUG] 8. Initial data (All Ledgers, Rates & Transactions) received. Full UI rendered.");
             } else {
-                console.log(`[DEBUG] Waiting for data. Rates Ready: ${ratesReady}, Transactions Ready: ${transactionsReady}`);
+                console.log(`[DEBUG] Waiting for data. Rates: ${ratesReady}, Txns: ${transactionsReady}, Ledger: ${ledgerReady}`);
             }
+        }
+        
+        window.printReport = (elementId) => {
+            // Hide Modals before printing
+            closeEditModal(); 
+            closeDeleteConfirmModal();
+
+            // Temporarily clone the target element to a new, print-friendly container
+            const reportEl = document.getElementById(elementId);
+            const printContainer = document.createElement('div');
+            printContainer.classList.add('printable-report');
+            
+            // Add a print-only header (before innerHTML to get the element first)
+            const header = document.createElement('h2');
+            header.classList.add('text-2xl', 'font-bold', 'mb-4');
+            header.textContent = `HH Enterprise Report: ${elementId.includes('financial') ? 'Financial Ledger' : 'Dealer Advance Ledger'}`;
+            printContainer.appendChild(header);
+            
+            // Add content
+            printContainer.innerHTML += reportEl.innerHTML;
+            
+            // Inject the container into the body for printing
+            document.body.appendChild(printContainer);
+            
+            window.print();
+            
+            // Clean up the container after printing
+            document.body.removeChild(printContainer);
         }
 
 
@@ -347,11 +521,13 @@
                     onSnapshot: firestoreModule.onSnapshot,
                     collection: firestoreModule.collection,
                     updateDoc: firestoreModule.updateDoc,
+                    deleteDoc: firestoreModule.deleteDoc,
                     writeBatch: firestoreModule.writeBatch,
                     setLogLevel: firestoreModule.setLogLevel,
+                    query: firestoreModule.query,
+                    orderBy: firestoreModule.orderBy,
                 }));
                 
-                // Set Firebase Log Level to Debug immediately after successful import
                 fb.setLogLevel('Debug');
                 console.log("[DEBUG] 2. Firebase modules dynamically imported successfully.");
 
@@ -370,20 +546,18 @@
             }
             
             const app = fb.initializeApp(firebaseConfig);
-            db = fb.getFirestore(app); // Global module scope assignment
-            auth = fb.getAuth(app); // Global module scope assignment
+            db = fb.getFirestore(app); 
+            auth = fb.getAuth(app); 
             
             const userInfoEl = document.getElementById('user-info');
             userInfoEl.textContent = 'Authenticating...';
 
-            // 1. Set up the state change observer FIRST. This is the source of truth for userId.
             fb.onAuthStateChanged(auth, (user) => {
                 if (user) {
-                    userId = user.uid; // Global module scope assignment
+                    userId = user.uid; 
                     userInfoEl.textContent = `User ID: ${userId} | App ID: ${appId}`;
                     console.log(`[DEBUG] 5. Auth State Changed: User signed in. UID: ${userId}`);
                     
-                    // 2. Start data listeners only when the user is stable.
                     startDataListeners();
                 } else {
                     userId = null;
@@ -391,11 +565,9 @@
                     console.log("[DEBUG] 5b. Auth state changed: No user found.");
                 }
                 
-                // 3. Hide loading screen after the initial check is complete.
                 hideLoading(); 
             });
 
-            // 4. Kick off the sign-in process (this will trigger the observer above).
             console.log("[DEBUG] 4. Attempting sign-in...");
             if (authToken) {
                 await fb.signInWithCustomToken(auth, authToken);
@@ -437,6 +609,8 @@
                     dealers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     renderDealerAdvances();
                     populateDealerSelects();
+                    // Populate edit modal dealer selects
+                    populateEditDealerSelects(); 
                     console.log(`[DEBUG] Listener 2: Dealers updated. Count: ${dealers.length}`);
                 }, (error) => console.error("[ERROR] Listener 2 (Dealers):", error));
             }
@@ -449,7 +623,7 @@
                     snapshot.docs.forEach(doc => {
                         companyRates[doc.id] = doc.data().rates || {};
                     });
-                    ratesReady = true; // Set flag
+                    ratesReady = true; 
                     checkDataReadyAndRender();
                     console.log(`[DEBUG] Listener 3: Company Rates updated. Companies: ${Object.keys(companyRates).length}`);
                 }, (error) => console.error("[ERROR] Listener 3 (Rates):", error));
@@ -460,10 +634,33 @@
             if (transactionsPath) {
                 fb.onSnapshot(fb.collection(db, transactionsPath), (snapshot) => {
                     transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    transactionsReady = true; // Set flag
+                    transactionsReady = true; 
                     checkDataReadyAndRender();
                     console.log(`[DEBUG] Listener 4: Transactions updated. Count: ${transactions.length}`);
                 }, (error) => console.error("[ERROR] Listener 4 (Transactions):", error));
+            }
+            
+            // Listener 5: Account Ledger (Triggers checkDataReadyAndRender)
+            const accountLedgerPath = getPrivateCollectionPath('account_ledger');
+            if (accountLedgerPath) {
+                // Note: We use in-memory sorting instead of orderBy to prevent index creation issues.
+                fb.onSnapshot(fb.collection(db, accountLedgerPath), (snapshot) => {
+                    accountLedger = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    console.log(`[DEBUG] Listener 5: Account Ledger updated. Count: ${accountLedger.length}`);
+                    ledgerReady = (dealerLedger.length > 0) || accountLedger.length > 0;
+                    checkDataReadyAndRender();
+                }, (error) => console.error("[ERROR] Listener 5 (Account Ledger):", error));
+            }
+            
+            // Listener 6: Dealer Ledger (Triggers checkDataReadyAndRender)
+            const dealerLedgerPath = getPrivateCollectionPath('dealer_ledger');
+            if (dealerLedgerPath) {
+                fb.onSnapshot(fb.collection(db, dealerLedgerPath), (snapshot) => {
+                    dealerLedger = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    console.log(`[DEBUG] Listener 6: Dealer Ledger updated. Count: ${dealerLedger.length}`);
+                    ledgerReady = (dealerLedger.length > 0) || accountLedger.length > 0;
+                    checkDataReadyAndRender();
+                }, (error) => console.error("[ERROR] Listener 6 (Dealer Ledger):", error));
             }
         };
 
@@ -485,7 +682,7 @@
                     <div class="p-4 border border-gray-200 rounded-lg bg-white shadow-md">
                         <p class="text-sm font-medium text-gray-500">${account.id}</p>
                         <p class="text-2xl font-extrabold text-dark">${formatBDT(account.balance)}</p>
-                        <p class="text-xs text-gray-400 mt-1">Last Update: ${formatDate(account.lastUpdated)}</p>
+                        <p class="text-xs text-gray-400 mt-1">Last Updated: ${formatDate(account.lastUpdated)}</p>
                     </div>
                 `).join('')}`;
         };
@@ -507,14 +704,15 @@
                     `;
                 }).join('');
         };
-
+        
         // RENDER 3: Company Rate Forms & Billing Summary - ONLY RUNS AFTER ratesReady & transactionsReady
         const renderCompanyRateSections = () => {
             const formsEl = document.getElementById('company-rate-sections');
-            const billingData = calculateWeeklyBilling();
+            // --- NEW: Calculate billing based on the current date range filter ---
+            const billingData = calculateWeeklyBilling(rateReportRange.startDate, rateReportRange.endDate);
+            // ---------------------------------------------------------------------
 
             if (!ratesReady || !transactionsReady) {
-                // Safety check, should not happen if called via checkDataReadyAndRender
                 formsEl.innerHTML = '<p class="text-gray-500">Loading initial rate and transaction data...</p>';
                 return;
             }
@@ -546,44 +744,101 @@
 
                         <!-- Weekly Billing Summary (Column 3) -->
                         <div class="lg:col-span-1 border-l pl-4 border-gray-100">
-                            <h4 class="text-xl font-bold text-dark border-b pb-2">Amount Owed (Total)</h4>
-                            <p class="text-sm text-gray-500 mt-2 mb-2 font-semibold">Total Revenue: <span class="text-lg text-blue-600">${formatBDT(currentBilling.totalRevenue)}</span></p>
+                            <h4 class="text-xl font-bold text-dark border-b pb-2">Billing Summary</h4>
                             
-                            <h5 class="text-sm font-semibold mt-4 mb-2">Weekly Breakdowns:</h5>
-                            <ul class="text-sm space-y-2 max-h-40 overflow-y-auto">
-                                ${currentBilling.weeklySummary.length === 0 ? 
-                                    '<li class="text-gray-400">No transactions recorded.</li>' :
-                                    currentBilling.weeklySummary.map(item => `
-                                        <li class="flex justify-between items-center p-2 bg-gray-50 rounded-lg">
-                                            <span class="text-xs font-medium text-gray-600">Week of ${item.weekStart}</span>
-                                            <span class="font-bold text-sm text-blue-700">${formatBDT(item.totalRevenue)}</span>
-                                        </li>
-                                    `).join('')
-                                }
-                            </ul>
+                            <!-- New Date Filter Form -->
+                            <form id="rate-filter-form-${company}" class="space-y-2 mt-4">
+                                <label class="text-xs text-gray-500 block">Report Start Date (Optional)</label>
+                                <input type="date" name="startDate" value="${rateReportRange.startDate || ''}" class="form-input text-sm w-full">
+                                <label class="text-xs text-gray-500 block">Report End Date (Optional)</label>
+                                <input type="date" name="endDate" value="${rateReportRange.endDate || ''}" class="form-input text-sm w-full">
+                                <button type="button" onclick="applyRateFilter(this.form)" class="text-xs btn-primary text-white py-2 px-4 rounded-lg w-full mt-2">Apply Date Filter</button>
+                            </form>
+
+                            <div class="mt-4">
+                                <h5 class="text-base font-bold text-gray-700">Amount Owed (Filtered Total)</h5>
+                                <p class="text-sm text-gray-500 mt-1 mb-2 font-semibold">Total Revenue: <span class="text-lg text-blue-600">${formatBDT(currentBilling.totalRevenue)}</span></p>
+                                
+                                <h5 class="text-sm font-semibold mt-4 mb-2">Weekly Breakdowns:</h5>
+                                <ul class="text-sm space-y-2 max-h-40 overflow-y-auto">
+                                    ${currentBilling.weeklySummary.length === 0 ? 
+                                        `<li class="text-gray-400">No transactions recorded ${rateReportRange.startDate || rateReportRange.endDate ? 'in this date range.' : 'yet.'}</li>` :
+                                        currentBilling.weeklySummary.map(item => `
+                                            <li class="flex justify-between items-center p-2 bg-gray-50 rounded-lg">
+                                                <span class="text-xs font-medium text-gray-600">Week of ${item.weekStart}</span>
+                                                <span class="font-bold text-sm text-blue-700">${formatBDT(item.totalRevenue)}</span>
+                                            </li>
+                                        `).join('')
+                                    }
+                                </ul>
+                            </div>
                         </div>
                     </div>
                 `;
             }).join('');
 
             // Attach submit listeners to the dynamically created forms
-            document.querySelectorAll('#company-rate-sections form').forEach(form => {
+            document.querySelectorAll('#company-rate-sections form[data-company]').forEach(form => {
                 form.onsubmit = handleRateFormSubmit;
             });
             updateSellingRates(); // Ensure transaction form rates are updated too
         };
         
+        // --- NEW: Handler to update the date filter and re-render the rate section ---
+        window.applyRateFilter = (form) => {
+            // Note: Since all rate sections share the same date filter, we only need to read it once.
+            const startDate = form.startDate.value.trim() || null;
+            const endDate = form.endDate.value.trim() || null;
+
+            rateReportRange.startDate = startDate;
+            rateReportRange.endDate = endDate;
+
+            // Re-render the entire section with the new filter
+            renderCompanyRateSections();
+        }
+        // -----------------------------------------------------------------------------
+
         // Helper to calculate weekly billing (used in both dashboard metrics and rate sections)
-        const calculateWeeklyBilling = () => {
+        // MODIFIED to accept startDate and endDate
+        const calculateWeeklyBilling = (startDate, endDate) => {
+            
+            let filteredTransactions = transactions;
+
+            // Apply date filtering if dates are provided
+            if (startDate || endDate) {
+                const startTimestamp = startDate ? new Date(startDate) : null;
+                const endTimestamp = endDate ? new Date(endDate) : null;
+                
+                // Ensure end date is inclusive of the whole day (set to 23:59:59)
+                if (endTimestamp) {
+                    endTimestamp.setHours(23, 59, 59, 999);
+                }
+
+                filteredTransactions = transactions.filter(t => {
+                    const tDate = t.date.toDate();
+                    
+                    const passesStart = !startTimestamp || tDate >= startTimestamp;
+                    const passesEnd = !endTimestamp || tDate <= endTimestamp;
+                    
+                    return passesStart && passesEnd;
+                });
+            }
+
+
             const billingMap = {};
 
-            transactions.forEach(t => {
+            filteredTransactions.forEach(t => {
                 const date = t.date.toDate();
-                // Get Monday of the week (assuming ISO week start)
-                const day = date.getDay(); // 0 = Sunday, 1 = Monday
-                const diff = date.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
-                const weekStart = new Date(date.setDate(diff));
+                
+                // Calculate week start for the transaction (assuming week starts Monday)
+                const dayOfMonth = date.getDate();
+                const dayOfWeek = date.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+                // Calculate difference to get to Monday (day 1). If today is Sun (0), diff is -6
+                const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+                const weekStart = new Date(date);
+                weekStart.setDate(dayOfMonth + diffToMonday);
                 weekStart.setHours(0, 0, 0, 0);
+                
                 const weekKey = `${t.companyName}-${weekStart.toISOString().slice(0, 10)}`;
 
                 if (!billingMap[t.companyName]) {
@@ -598,17 +853,18 @@
                     };
                 }
 
-                // Sum up the total revenue for the billing summary (expected revenue)
                 billingMap[t.companyName].weeklySummary[weekKey].totalRevenue += t.expectedRevenue;
-                billingMap[t.companyName].totalRevenue += t.expectedRevenue;
             });
 
-            // Convert weeklySummary object to array and sort
             for (const company in billingMap) {
-                // Recalculate total revenue based on all transactions for that company
-                billingMap[company].totalRevenue = transactions.filter(t => t.companyName === company).reduce((sum, t) => sum + t.expectedRevenue, 0);
-
-                billingMap[company].weeklySummary = Object.values(billingMap[company].weeklySummary).sort((a, b) => new Date(b.weekStart) - new Date(a.weekStart));
+                // Recalculate total revenue based *only* on the filtered set
+                billingMap[company].totalRevenue = filteredTransactions.filter(t => t.companyName === company).reduce((sum, t) => sum + t.expectedRevenue, 0);
+                // The date format must be parsed correctly for sorting (dd/mm/yyyy -> yyyy-mm-dd)
+                billingMap[company].weeklySummary = Object.values(billingMap[company].weeklySummary).sort((a, b) => {
+                    const dateA = new Date(a.weekStart.split('/').reverse().join('-'));
+                    const dateB = new Date(b.weekStart.split('/').reverse().join('-'));
+                    return dateB - dateA; // Sort descending (newest first)
+                });
             }
 
             return billingMap;
@@ -636,22 +892,104 @@
                 const profitClass = profit >= 0 ? 'text-green-600' : 'text-red-600';
                 
                 return `
-                    <tr class="hover:bg-gray-50 transition">
+                    <tr class="hover:bg-gray-50 transition" data-id="${t.id}">
                         <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-500">${formatDate(t.date)}</td>
                         <td class="px-3 py-2 whitespace-nowrap text-sm font-medium text-dark">${t.challanNumber}</td>
                         <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-700">${t.dealerName}</td>
                         <td class="px-3 py-2 whitespace-nowrap text-sm font-semibold text-primary">${t.companyName}</td>
                         <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-700">${t.woodType} / ${t.quantityKg} KG</td>
-                        <td class="px-3 py-2 whitespace-nowrap text-sm text-right">
-                            <span class="text-red-600">${t.buyingRate.toFixed(2)}</span> / <span class="text-green-600">${t.sellingRateManual.toFixed(2)}</span>
-                        </td>
                         <td class="px-3 py-2 whitespace-nowrap text-sm font-bold text-right ${profitClass}">${formatBDT(profit)}</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-right">
+                            <button onclick="openEditModal('${t.id}')" class="text-blue-600 hover:text-blue-800 text-xs font-semibold">Edit</button>
+                        </td>
                     </tr>
                 `;
             }).join('');
         };
+        
+        // RENDER 5: Financial Account Ledger Report
+        const renderAccountLedger = () => {
+            const listEl = document.getElementById('account-ledger-list');
+            if (!listEl) return;
+            
+            if (!ledgerReady) {
+                 listEl.innerHTML = '<p class="text-gray-500">Loading ledger history...</p>';
+                 return;
+            }
+            
+            const sortedLedger = [...accountLedger].sort((a, b) => b.date.toDate() - a.date.toDate());
 
-        // RENDER 5: Dashboard Metrics - ONLY RUNS AFTER ratesReady & transactionsReady
+            if (sortedLedger.length === 0) {
+                listEl.innerHTML = '<p class="text-gray-500">No financial account history recorded yet.</p>';
+                return;
+            }
+
+            listEl.innerHTML = sortedLedger.map(entry => {
+                const isDeposit = entry.type.includes('Deposit') || entry.type.includes('Initial Balance');
+                const sign = isDeposit ? '+' : '-';
+                const color = isDeposit ? 'text-green-600' : 'text-red-600';
+                const rowClass = isDeposit ? 'deposit' : 'withdrawal';
+                
+                const description = entry.type.includes('Deposit') || entry.type.includes('Initial Balance') 
+                    ? `Balance set/deposit by user.` 
+                    : entry.type === 'Withdrawal: Dealer Advance'
+                    ? `Advance payment to Dealer: ${entry.dealerName}.`
+                    : `Correction/Withdrawal.`;
+
+                return `
+                    <div class="ledger-row p-3 bg-white shadow-sm rounded-lg flex justify-between items-center ${rowClass}">
+                        <div>
+                            <p class="text-sm font-semibold text-gray-800">${entry.type}</p>
+                            <p class="text-xs text-gray-500 mt-1">${description}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-lg font-bold ${color}">${sign} ${formatBDT(entry.amount)}</p>
+                            <p class="text-xs text-gray-500">${entry.accountName} on ${formatDate(entry.date)}</p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        };
+        
+        // RENDER 6: Dealer Ledger Report
+        const renderDealerLedger = () => {
+            const listEl = document.getElementById('dealer-ledger-list');
+            if (!listEl) return;
+            
+            if (!ledgerReady) {
+                 listEl.innerHTML = '<p class="text-gray-500">Loading ledger history...</p>';
+                 return;
+            }
+            
+            const sortedLedger = [...dealerLedger].sort((a, b) => b.date.toDate() - a.date.toDate());
+
+            if (sortedLedger.length === 0) {
+                listEl.innerHTML = '<p class="text-gray-500">No dealer advance history recorded yet.</p>';
+                return;
+            }
+
+            listEl.innerHTML = sortedLedger.map(entry => {
+                const isAdvance = entry.type === 'Advance Given';
+                const color = isAdvance ? 'text-red-600' : 'text-green-600';
+                const rowClass = isAdvance ? 'withdrawal' : 'deposit'; // Advance is a negative balance for us
+
+                return `
+                    <div class="ledger-row p-3 bg-white shadow-sm rounded-lg flex justify-between items-center ${rowClass}">
+                        <div>
+                            <p class="text-sm font-semibold text-gray-800">${entry.dealerName}</p>
+                            <p class="text-xs text-gray-500 mt-1">${entry.type} (${entry.sourceAccount})</p>
+                            <p class="text-xs text-gray-400 mt-1">${entry.narration || 'No narration provided.'}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-lg font-bold ${color}">${formatBDT(entry.amount)}</p>
+                            <p class="text-xs text-gray-500">${formatDate(entry.date)}</p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        };
+
+        // RENDER 7: Dashboard Metrics - ONLY RUNS AFTER ratesReady & transactionsReady
         const updateDashboardMetrics = () => {
             let totalRevenue = 0;
             let totalCost = 0;
@@ -679,7 +1017,7 @@
             selects.forEach(select => {
                 if (!select) return;
                 const currentValue = select.value;
-                select.innerHTML = '<option value="">Fund Source (Optional for New Dealer Only)</option>';
+                select.innerHTML = '<option value="">Fund Source Account</option>';
                 financialAccounts.forEach(account => {
                     const option = document.createElement('option');
                     option.value = account.id;
@@ -704,9 +1042,22 @@
                     select.appendChild(option);
                 });
             });
-            // Calling this once after population to trigger rate cleanup
             const dealerSelect = document.getElementById('dealerName');
             if (dealerSelect) dealerSelect.dispatchEvent(new Event('change'));
+        };
+        
+        const populateEditDealerSelects = () => {
+            const select = document.getElementById('edit-dealerName');
+            if (!select) return;
+            const currentValue = select.value;
+            select.innerHTML = '';
+            dealers.forEach(dealer => {
+                const option = document.createElement('option');
+                option.value = dealer.name;
+                option.textContent = dealer.name; 
+                if (dealer.name === currentValue) option.selected = true;
+                select.appendChild(option);
+            });
         };
         
         // RENDER WOOD ENTRIES FOR TRANSACTION FORM
@@ -716,18 +1067,16 @@
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 p-3 border rounded-lg bg-gray-50 items-center">
                     <div class="font-bold text-sm text-dark">${wood}</div>
                     <input type="number" data-wood="${wood}" data-field="quantity" placeholder="Quantity (KG)" min="0" step="1" value="0" class="form-input text-sm">
-                    <input type="number" data-wood="${wood}" data-field="buyRate" placeholder="Buying Rate (BDT/KG)" min="0" step="0.01" required class="form-input text-sm">
+                    <input type="number" data-wood="${wood}" data-field="buyRate" placeholder="Buying Rate (BDT/KG)" min="0" step="0.01" value="0" required class="form-input text-sm">
                     <input type="text" data-wood="${wood}" data-field="sellRate" placeholder="Selling Rate (Calculated)" readonly class="form-input text-sm bg-amber-50 cursor-not-allowed">
                 </div>
             `).join('');
             
-            // Re-attach listeners for dynamic rate updates
             const companySelect = document.getElementById('companyName');
             if (companySelect) companySelect.addEventListener('change', updateSellingRates);
 
             document.querySelectorAll('#wood-entries input[data-field="buyRate"]').forEach(input => {
                  input.addEventListener('input', () => {
-                     // Ensure quantity is not zero if a rate is entered
                      const quantityInput = document.querySelector(`#wood-entries input[data-wood="${input.getAttribute('data-wood')}"][data-field="quantity"]`);
                      if (parseFloat(input.value) > 0 && parseFloat(quantityInput.value) === 0) {
                          quantityInput.value = 1; 
@@ -735,7 +1084,6 @@
                  });
             });
             
-            // Initial calls
             updateSellingRates();
         };
 
@@ -754,42 +1102,77 @@
             });
         };
         
-        // Financial Account Form Submission
+        // Financial Account Form Submission (with Ledger support)
         const handleAccountFormSubmit = async (e) => {
             e.preventDefault();
             
-            // Check if db is initialized (Fix for "db not defined")
             if (!db) {
                 console.error("Firebase not initialized. Cannot submit form.");
                 return;
             }
 
             const accountName = document.getElementById('accountName').value.trim();
-            const balance = parseFloat(document.getElementById('accountBalance').value);
+            const newBalance = parseFloat(document.getElementById('accountBalance').value);
+            // Convert input date to start of day UTC
+            const inputDateString = document.getElementById('accountDate').value;
+            const accountDate = inputDateString ? new Date(inputDateString) : new Date();
 
-            if (!userId || !accountName || isNaN(balance) || balance < 0) {
-                console.error("Invalid account input or unauthenticated.");
+            if (!userId || !accountName || isNaN(newBalance) || newBalance < 0 || isNaN(accountDate.getTime())) {
+                console.error("Invalid account input, date, or unauthenticated.");
                 return;
             }
 
-            try {
-                await fb.setDoc(fb.doc(db, getPrivateCollectionPath('financial_accounts'), accountName), {
-                    balance: balance,
-                    lastUpdated: new Date()
-                }, { merge: true }); // Use merge so existing accounts can be updated
-                console.log('Success: Account balance updated/created!');
+            const currentAccount = financialAccounts.find(acc => acc.id === accountName);
+            const oldBalance = currentAccount ? currentAccount.balance : 0;
+            const amount = Math.abs(newBalance - oldBalance);
+            
+            let type = '';
+            if (!currentAccount) {
+                type = 'Initial Balance Set';
+            } else if (newBalance > oldBalance) {
+                type = 'Deposit/Correction Increase';
+            } else if (newBalance < oldBalance) {
+                type = 'Withdrawal/Correction Decrease';
+            } else {
+                console.log('Balance did not change. Skipping update.');
                 e.target.reset();
+                return;
+            }
+            
+            const batch = fb.writeBatch(db);
+
+            // 1. Update/Set current balance
+            batch.set(fb.doc(db, getPrivateCollectionPath('financial_accounts'), accountName), {
+                balance: newBalance,
+                lastUpdated: new Date()
+            }, { merge: true }); 
+            
+            // 2. Record ledger entry
+            batch.set(fb.doc(fb.collection(db, getPrivateCollectionPath('account_ledger'))), {
+                accountName: accountName,
+                type: type,
+                amount: amount,
+                date: accountDate,
+                newBalance: newBalance,
+                oldBalance: oldBalance,
+                recordedAt: new Date()
+            });
+
+            try {
+                await batch.commit();
+                console.log(`Success: Account balance updated/created. Type: ${type}`);
+                e.target.reset();
+                document.getElementById('accountDate').valueAsDate = new Date();
             } catch (error) {
-                console.error("Error setting account balance:", error);
+                console.error("Error setting account balance and ledger:", error);
                 console.error(`Error: Could not save account. Check console.`);
             }
         };
 
-        // Dealer Advance/Rate Form Submission
+        // Dealer Advance Form Submission (with Ledger support, removed paymentForm)
         const handleDealerAdvanceFormSubmit = async (e) => {
             e.preventDefault();
             
-            // Check if db is initialized (Fix for "db not defined")
             if (!db) {
                 console.error("Firebase not initialized. Cannot submit form.");
                 return;
@@ -798,92 +1181,91 @@
             const form = e.target;
             const dealerFullName = form.dealerFullName.value.trim();
             
-            // Advance specific fields (optional)
             const sourceAccountName = form.advanceSourceAccount.value;
             const advanceAmount = parseFloat(form.advanceAmount.value) || 0;
-            const paymentForm = form.paymentForm.value.trim();
+            // Convert input date to start of day UTC
+            const inputDateString = form.advanceDate.value;
+            const advanceDate = inputDateString ? new Date(inputDateString) : new Date();
             const narration = form.advanceNarration.value.trim();
 
             if (!userId || dealerFullName.length === 0) {
                 console.error('Please fill the Dealer Full Name.');
                 return;
             }
+            if (advanceAmount <= 0) {
+                console.error('Advance amount must be greater than zero.');
+                return;
+            }
+            if (!sourceAccountName) {
+                console.error('You must select a Fund Source Account.');
+                return;
+            }
+            if (isNaN(advanceDate.getTime())) {
+                console.error('Please select a valid date for the advance.');
+                return;
+            }
 
-            // Check advance requirements if amount is > 0
-            if (advanceAmount > 0) {
-                if (!sourceAccountName) {
-                    console.error('If you are recording an Advance, you must select a Fund Source Account.');
-                    return;
-                }
-                const sourceAccount = financialAccounts.find(acc => acc.id === sourceAccountName);
-                if (!sourceAccount || sourceAccount.balance < advanceAmount) {
-                    console.error(`Error: Insufficient balance in ${sourceAccountName}. Current: ${formatBDT(sourceAccount ? sourceAccount.balance : 0)}`);
-                    return;
-                }
+            const sourceAccount = financialAccounts.find(acc => acc.id === sourceAccountName);
+            if (!sourceAccount || sourceAccount.balance < advanceAmount) {
+                console.error(`Error: Insufficient balance in ${sourceAccountName}. Current: ${formatBDT(sourceAccount ? sourceAccount.balance : 0)}`);
+                return;
             }
 
             const batch = fb.writeBatch(db);
             const dealerRef = fb.doc(db, getPrivateCollectionPath('dealers'), dealerFullName);
+            const accountRef = fb.doc(db, getPrivateCollectionPath('financial_accounts'), sourceAccountName);
 
-            // 1. Update Dealer Advance (Initial/Existing dealer update)
+            // 1. Update Dealer Advance
             const currentDealer = dealers.find(d => d.name === dealerFullName);
             const initialAdvance = currentDealer ? currentDealer.currentAdvance : 0;
             const newAdvance = initialAdvance + advanceAmount;
             
-            // Prepare dealer data
-            const dealerData = {
-                name: dealerFullName,
-                currentAdvance: newAdvance,
-            };
+            batch.set(dealerRef, { name: dealerFullName, currentAdvance: newAdvance }, { merge: true });
+
+            // 2. Deduct from Financial Account
+            const newAccountBalance = sourceAccount.balance - advanceAmount;
+            batch.update(accountRef, {
+                balance: newAccountBalance,
+                lastUpdated: new Date()
+            });
+
+            // 3. Record Dealer Ledger Entry (Advance Given)
+            batch.set(fb.doc(fb.collection(db, getPrivateCollectionPath('dealer_ledger'))), {
+                dealerName: dealerFullName,
+                type: 'Advance Given',
+                amount: advanceAmount,
+                sourceAccount: sourceAccountName,
+                date: advanceDate,
+                narration: narration,
+                recordedAt: new Date()
+            });
             
-            batch.set(dealerRef, dealerData, { merge: true });
-
-            // 2. Process Advance Transaction if amount > 0
-            if (advanceAmount > 0) {
-                const accountRef = fb.doc(db, getPrivateCollectionPath('financial_accounts'), sourceAccountName);
-                const sourceAccount = financialAccounts.find(acc => acc.id === sourceAccountName);
-                
-                // Deduct from Financial Account
-                const newAccountBalance = sourceAccount.balance - advanceAmount;
-                batch.update(accountRef, {
-                    balance: newAccountBalance,
-                    lastUpdated: new Date()
-                });
-
-                // Record Ledger Entry
-                batch.set(fb.doc(fb.collection(db, getPrivateCollectionPath('dealer_ledger'))), {
-                    dealerName: dealerFullName,
-                    type: 'Advance Given',
-                    amount: advanceAmount,
-                    sourceAccount: sourceAccountName,
-                    date: new Date(),
-                    paymentForm: paymentForm,
-                    narration: narration
-                });
-            }
+            // 4. Record Financial Account Ledger Entry (Withdrawal)
+            batch.set(fb.doc(fb.collection(db, getPrivateCollectionPath('account_ledger'))), {
+                accountName: sourceAccountName,
+                type: 'Withdrawal: Dealer Advance',
+                amount: advanceAmount,
+                date: advanceDate,
+                dealerName: dealerFullName,
+                recordedAt: new Date()
+            });
 
 
             try {
                 await batch.commit();
-                
-                let message = `Success: Dealer ${dealerFullName} updated.`;
-                if (advanceAmount > 0) {
-                    message += ` ${formatBDT(advanceAmount)} advance also recorded and deducted.`;
-                }
-
-                console.log(message);
+                console.log(`Success: Dealer ${dealerFullName} updated. ${formatBDT(advanceAmount)} advance recorded.`);
                 form.reset();
+                document.getElementById('advanceDate').valueAsDate = new Date();
             } catch (error) {
                 console.error("Error processing dealer update/advance:", error);
                 console.error('Error: Could not save dealer or advance. Check console.');
             }
         };
 
-        // Company Rate Form Submission (Generic handler for all rate forms)
+        // Company Rate Form Submission
         const handleRateFormSubmit = async (e) => {
             e.preventDefault();
             
-            // Check if db is initialized (Fix for "db not defined")
             if (!db) {
                 console.error("Firebase not initialized. Cannot submit form.");
                 return;
@@ -921,7 +1303,6 @@
         const handleTransactionFormSubmit = async (e) => {
             e.preventDefault();
             
-            // Check if db is initialized (Fix for "db not defined")
             if (!db) {
                 console.error("Firebase not initialized. Cannot submit form.");
                 return;
@@ -929,11 +1310,14 @@
 
             const form = e.target;
             const challanNumber = form.challanNumber.value.trim();
-            const transactionDate = new Date(form.transactionDate.value);
+            // Convert input date to start of day UTC
+            const inputDateString = form.transactionDate.value;
+            const transactionDate = inputDateString ? new Date(inputDateString) : new Date();
+            
             const dealerName = form.dealerName.value;
             const companyName = form.companyName.value;
             
-            if (!userId || !challanNumber || !transactionDate || !dealerName || !companyName) {
+            if (!userId || !challanNumber || isNaN(transactionDate.getTime()) || !dealerName || !companyName) {
                 console.error('Please fill the Challan, Date, Dealer, and Company details.');
                 return;
             }
@@ -950,11 +1334,9 @@
 
                 const quantityKg = parseFloat(quantityInput.value) || 0;
                 const buyingRate = parseFloat(buyRateInput.value) || 0;
-                // Read the stored numeric value
                 const sellingRateManual = parseFloat(sellRateInput.dataset.rateValue) || 0; 
 
                 if (quantityKg > 0) {
-                    // Validation Check
                     if (buyingRate <= 0) {
                         console.error(`Error: Buying rate for ${wood} is zero/invalid (${buyingRate}). Please manually enter the cost rate.`);
                         hasError = true;
@@ -965,7 +1347,6 @@
                         hasError = true;
                         return;
                     }
-
 
                     const expectedRevenue = quantityKg * sellingRateManual;
                     const cost = quantityKg * buyingRate;
@@ -980,8 +1361,8 @@
                         companyName,
                         woodType: wood,
                         quantityKg,
-                        buyingRate: buyingRate, // Store the actual rate used
-                        sellingRateManual: sellingRateManual, // Store the actual rate used
+                        buyingRate: buyingRate,
+                        sellingRateManual: sellingRateManual,
                         expectedRevenue,
                         cost,
                         profit: profit,
@@ -1009,13 +1390,131 @@
                 await batch.commit();
                 console.log(`Successfully recorded ${transactionCount} transaction(s) under Challan ${challanNumber}. Estimated Total Profit: ${formatBDT(totalProfit)}.`);
                 form.reset();
-                renderWoodEntries(); // Reset wood inputs and re-run rate population
+                renderWoodEntries();
                 document.getElementById('transactionDate').valueAsDate = new Date();
             } catch (error) {
                 console.error("Error recording transactions batch:", error);
                 console.error('Error: Could not record transactions. Check console.');
             }
         };
+        
+        // CRUD: Open Edit Modal
+        window.openEditModal = (transactionId) => {
+            const transaction = transactions.find(t => t.id === transactionId);
+            if (!transaction) {
+                console.error("Transaction not found for ID:", transactionId);
+                return;
+            }
+
+            // Populate the Edit Dealer Selects (in case dealers changed since page load)
+            populateEditDealerSelects();
+
+            // Populate the form fields
+            document.getElementById('edit-transaction-id').value = transaction.id;
+            document.getElementById('edit-challanNumber').value = transaction.challanNumber;
+            document.getElementById('edit-transactionDate').value = formatInputDate(transaction.date);
+            document.getElementById('edit-dealerName').value = transaction.dealerName;
+            document.getElementById('edit-woodType').value = transaction.woodType;
+            document.getElementById('edit-quantityKg').value = transaction.quantityKg;
+            document.getElementById('edit-buyingRate').value = transaction.buyingRate;
+            document.getElementById('edit-sellingRateManual').value = transaction.sellingRateManual;
+            
+            // Display the modal
+            document.getElementById('edit-transaction-modal').classList.remove('hidden');
+            document.getElementById('edit-transaction-modal').classList.add('flex');
+        }
+
+        // CRUD: Close Edit Modal
+        const closeEditModal = () => {
+             document.getElementById('edit-transaction-modal').classList.remove('flex');
+             document.getElementById('edit-transaction-modal').classList.add('hidden');
+        }
+        
+        // CRUD: Open Delete Confirmation Modal
+        const openDeleteConfirmModal = () => {
+            closeEditModal(); // Hide edit modal first
+            document.getElementById('delete-confirm-modal').classList.remove('hidden');
+            document.getElementById('delete-confirm-modal').classList.add('flex');
+        }
+        
+        // CRUD: Close Delete Confirmation Modal
+        const closeDeleteConfirmModal = () => {
+             document.getElementById('delete-confirm-modal').classList.remove('flex');
+             document.getElementById('delete-confirm-modal').classList.add('hidden');
+        }
+
+        // CRUD: Save Changes to Transaction
+        const handleEditTransactionSubmit = async (e) => {
+            e.preventDefault();
+            
+            if (!db) {
+                console.error("Firebase not initialized. Cannot submit form.");
+                return;
+            }
+
+            const transactionId = document.getElementById('edit-transaction-id').value;
+            const challanNumber = document.getElementById('edit-challanNumber').value.trim();
+            // Convert input date to start of day UTC
+            const inputDateString = document.getElementById('edit-transactionDate').value;
+            const transactionDate = inputDateString ? new Date(inputDateString) : new Date();
+            
+            const dealerName = document.getElementById('edit-dealerName').value;
+            const quantityKg = parseFloat(document.getElementById('edit-quantityKg').value);
+            const buyingRate = parseFloat(document.getElementById('edit-buyingRate').value);
+            const sellingRateManual = parseFloat(document.getElementById('edit-sellingRateManual').value);
+            
+            if (quantityKg <= 0 || buyingRate <= 0 || sellingRateManual <= 0 || isNaN(transactionDate.getTime())) {
+                 console.error('Invalid quantity or rates. Must be positive values.');
+                 return;
+            }
+
+            const expectedRevenue = quantityKg * sellingRateManual;
+            const cost = quantityKg * buyingRate;
+            const profit = expectedRevenue - cost;
+
+            const transactionRef = fb.doc(db, getPrivateCollectionPath('transactions'), transactionId);
+            
+            try {
+                await fb.updateDoc(transactionRef, {
+                    challanNumber: challanNumber,
+                    date: transactionDate,
+                    dealerName: dealerName,
+                    quantityKg: quantityKg,
+                    buyingRate: buyingRate,
+                    sellingRateManual: sellingRateManual,
+                    expectedRevenue: expectedRevenue,
+                    cost: cost,
+                    profit: profit
+                });
+                
+                console.log(`Success: Transaction ${transactionId} updated.`);
+                closeEditModal();
+            } catch (error) {
+                console.error("Error updating transaction:", error);
+                console.error('Error: Could not save changes. Check console.');
+            }
+        }
+        
+        // CRUD: Delete Transaction (Final Action)
+        const handleDeleteTransaction = async () => {
+            const transactionId = document.getElementById('edit-transaction-id').value;
+            if (!transactionId || !db) return;
+            
+            // The transaction ID is stored in the hidden field from openEditModal
+
+            const transactionRef = fb.doc(db, getPrivateCollectionPath('transactions'), transactionId);
+            
+            try {
+                await fb.deleteDoc(transactionRef);
+                console.log(`Success: Transaction ${transactionId} deleted.`);
+                closeDeleteConfirmModal();
+                closeEditModal(); // Just in case, though usually closed by the confirm flow
+            } catch (error) {
+                console.error("Error deleting transaction:", error);
+                console.error('Error: Could not delete entry. Check console.');
+            }
+        }
+
 
         // ====================================================================
         // 5. UI LOGIC (TAB SWITCHING)
@@ -1040,19 +1539,25 @@
                 });
             });
             
-            // Set default date for transaction
-            const transactionDateEl = document.getElementById('transactionDate');
-            if (transactionDateEl) transactionDateEl.valueAsDate = new Date();
+            // Set default dates
+            const today = new Date().toISOString().slice(0, 10);
+            document.getElementById('transactionDate').value = today;
+            document.getElementById('advanceDate').value = today;
+            document.getElementById('accountDate').value = today;
 
             // Attach Form Submit Handlers
-            const accountForm = document.getElementById('account-form');
-            if (accountForm) accountForm.onsubmit = handleAccountFormSubmit;
+            document.getElementById('account-form').onsubmit = handleAccountFormSubmit;
+            document.getElementById('dealer-advance-form').onsubmit = handleDealerAdvanceFormSubmit;
+            document.getElementById('transaction-form').onsubmit = handleTransactionFormSubmit;
             
-            const dealerForm = document.getElementById('dealer-advance-form');
-            if (dealerForm) dealerForm.onsubmit = handleDealerAdvanceFormSubmit;
+            // Attach Edit Modal Handlers
+            document.getElementById('close-edit-modal').onclick = closeEditModal;
+            document.getElementById('edit-transaction-form').onsubmit = handleEditTransactionSubmit;
             
-            const transactionForm = document.getElementById('transaction-form');
-            if (transactionForm) transactionForm.onsubmit = handleTransactionFormSubmit;
+            // Attach Delete Confirmation Handlers
+            document.getElementById('open-delete-confirm-btn').onclick = openDeleteConfirmModal;
+            document.getElementById('cancel-delete-btn').onclick = closeDeleteConfirmModal;
+            document.getElementById('confirm-delete-btn').onclick = handleDeleteTransaction;
             
             // Initial wood entries render
             renderWoodEntries();
@@ -1066,7 +1571,7 @@
             await initializeFirebase();
             setupUIListeners();
             
-            // Initial call to ensure placeholders are set while waiting for data
+            // Initial manual renders (will be updated by listeners later)
             renderCompanyRateSections();
             renderTransactionsTable();
         };
